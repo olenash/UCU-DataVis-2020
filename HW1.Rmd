@@ -1,0 +1,113 @@
+---
+title: "HW1"
+output: html_document
+---
+```{r}
+library(ggplot2)
+library(dplyr)
+library(gganimate)
+library(gifski)
+```
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+worldtilegrid <- read.csv("worldtilegrid.csv", stringsAsFactors = FALSE)
+europegrid <- worldtilegrid[which(worldtilegrid$region == 'Europe'),]
+```
+```{r}
+europegrid$x[europegrid$alpha.2=='RU'] <-17
+europegrid$y[europegrid$alpha.2=='RU'] <-3
+europegrid$y[europegrid$alpha.2=='MD'] <- 6
+europegrid$name[europegrid$name=='Russian Federation'] <-'Russia'
+europegrid$name[europegrid$name=='Bosnia & Herzegovina'] <-'Bosnia and Herzegovina'
+europegrid$name[europegrid$name=='Moldova (Republic of)'] <- 'Moldova'
+europegrid$name[europegrid$name=='Great Britain and Northern Ireland'] <-'United Kingdom'
+europegrid$name[europegrid$name=='Macedonia'] <-'North Macedonia' 
+#europegrid$name[europegrid$name== 'Czech Republic']<-'Czechia'
+europegrid$x[europegrid$alpha.2=='LV'] <- 16
+europegrid$x[europegrid$alpha.2=='EE'] <- 16
+europegrid$x[europegrid$alpha.2=='FI'] <- 16
+europegrid$x[europegrid$alpha.2=='SE'] <- 15
+europegrid$x[europegrid$alpha.2=='NO'] <- 14
+europegrid$y[europegrid$alpha.2=='MT'] <- 9
+europegrid$x[europegrid$alpha.2=='MT'] <- 13
+europegrid$y[europegrid$alpha.2=='PT'] <- 7
+europegrid$x[europegrid$alpha.2=='PT'] <- 12
+europegrid
+```
+
+```{r}
+egrid <- ggplot(europegrid, aes(xmin = x, ymin = y, xmax = x + 1, ymax = y + 1))
+mytheme <- theme_minimal() + theme(panel.grid = element_blank(), axis.text = element_blank(), axis.title = element_blank())
+egrid + geom_rect(color = "#ffffff") + mytheme+geom_text(aes(x = x, y = y, label = alpha.2), color = "#ffffff", alpha = 0.5, nudge_x = 0.5, nudge_y = -0.5, size = 3) + scale_y_reverse()
+```
+```{r}
+cdata<- read.csv("covid19_global_confirmed_cases.csv", stringsAsFactors = FALSE)
+cdata$country_region[cdata$country_region== 'Czechia']<-'Czech Republic'
+```
+```{r}
+population<- read.csv('population_by_country_2020.csv', stringsAsFactors = FALSE)
+population$Country..or.dependency.[population$Country..or.dependency.== 'Czech Republic (Czechia)']<-'Czech Republic'
+population <- population %>% select(Country..or.dependency., Population..2020.)
+kosovo <- data.frame('Country..or.dependency.'='Kosovo', 'Population..2020.' = 1810366)
+population <- rbind(population, kosovo)
+```
+
+```{r}
+country_names<-europegrid$name
+population[which(population$Country..or.dependency. %in% country_names),]
+```
+
+```{r}
+cdata$date <- as.Date(as.character(cdata$date), format = "%Y-%m-%d")
+```
+```{r}
+grouped_cdata <- cdata %>% group_by(week = cut(date, "week"), country = country_region) %>% summarise(value = max(confirmed_cases))
+```
+
+```{r}
+grouped_cdata <- grouped_cdata %>% inner_join(population, by=c('country' = 'Country..or.dependency.'))
+```
+```{r}
+grouped_cdata <- grouped_cdata %>% mutate(v_per_100_thousand = value*100000/Population..2020.)
+```
+
+```{r}
+grouped_cdata <- grouped_cdata[which(grouped_cdata$country %in% country_names),]
+grouped_cdata$week <-as.POSIXct(x=grouped_cdata$week, format="%Y-%m-%d")
+```
+
+```{r}
+cuted_grid <- europegrid[c('name', 'alpha.2','x','y')]
+grouped_cdata <- grouped_cdata %>% inner_join(cuted_grid,by = c('country' = 'name'))
+```
+```{r}
+egrid <- ggplot(grouped_cdata, aes(xmin = x, ymin = y, xmax = x + 1, ymax = y + 1, fill=v_per_100_thousand)) 
+mytheme <- theme_minimal() + 
+  theme(panel.grid = element_blank(),
+        axis.text = element_blank(),
+        axis.title = element_blank(),
+        plot.title = element_text(hjust = 0.5, size=28),
+        plot.subtitle = element_text(hjust = 0.5, size=18), 
+        legend.title = element_blank(), 
+        legend.key.size = unit(2, 'cm')) 
+
+gg_animation <- egrid + geom_rect(color = "#ffffff") + mytheme+geom_text(aes(x = x, y = y, label = alpha.2), color = "#ffffff", alpha = 0.5, nudge_x = 0.5, nudge_y = -0.5, size = 3) + scale_y_reverse()+ scale_fill_gradient(low = "palegreen4", high = "red")+
+  #transition_time(week) +labs(title = "Week: {format(frame_time, '%Y-%m-%d')}") 
+  transition_states(week)+ labs(title = "Covid-19 Cases per 100 000 of population in Europe" , 
+                                subtitle = "Week: {closest_state}") 
+anim <- animate(gg_animation, 
+        width = 900, 
+        height = 600,
+        fps = 5, renderer = gifski_renderer()) 
+
+# save the last created animation to the current directory 
+anim_save("animated_plot_new_col.gif", animation = anim)
+```
+
+
+
